@@ -10,6 +10,7 @@ passlib[bcrypt]
 python-multipart
 starlette
 alembic
+bcrypt==4.0.1
 
 # --- AI & LangChain ---
 langchain
