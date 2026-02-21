@@ -11,19 +11,11 @@ python-multipart
 starlette
 alembic
 
-# LangChain Core
+# --- AI & LangChain ---
 langchain
 langchain-core
-
-
-
-# Environment Variable Management
+langchain-deepseek
 python-dotenv
 
-
-# Machine Learning Utilities
+# --- Utilities ---
 numpy
-
-# deepseek
-langchain_deepseek
-

@@ -11,10 +11,14 @@ app=FastAPI()
 
 
 
-# ✅ CORS middleware
+# ✅ Updated CORS middleware for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://todosapp-lilac.vercel.app",  # Your Vercel Frontend
+        "https://todosapp-fwas.onrender.com"   # Your Render Backend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,10 +26,9 @@ app.add_middleware(
 
 
 
-
 models.Base.metadata.create_all(bind=engine)
 
-@app.get("/healthy")
+@app.get("/")
 async def healthy():
     return {"status":"healthy"}
 
