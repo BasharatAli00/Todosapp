@@ -1,0 +1,15 @@
+# Secrets
+.env
+.venv
+fastapi_env/
+
+# Python junk
+__pycache__/
+*.py[cod]
+*.db
+Backend/chroma_db/
+
+# Frontend junk
+frontend/node_modules/
+frontend/.next/
+frontend/out/

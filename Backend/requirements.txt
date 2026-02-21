@@ -1,0 +1,36 @@
+# --- Core FastAPI & Database ---
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+starlette
+alembic
+
+# LangChain Core
+langchain
+langchain-core
+
+# Hugging Face Integration
+langchain-huggingface
+transformers
+huggingface-hub
+
+# Environment Variable Management
+python-dotenv
+torch
+
+# Machine Learning Utilities
+numpy
+
+# deepseek
+langchain_deepseek
+
+# Vector Store & Embeddings
+langchain-chroma
+chromadb
+sentence-transformers
