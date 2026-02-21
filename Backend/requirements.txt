@@ -15,14 +15,11 @@ alembic
 langchain
 langchain-core
 
-# Hugging Face Integration
-langchain-huggingface
-transformers
-huggingface-hub
+
 
 # Environment Variable Management
 python-dotenv
-torch
+
 
 # Machine Learning Utilities
 numpy
@@ -30,7 +27,3 @@ numpy
 # deepseek
 langchain_deepseek
 
-# Vector Store & Embeddings
-langchain-chroma
-chromadb
-sentence-transformers

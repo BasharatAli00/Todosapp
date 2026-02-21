@@ -7,8 +7,8 @@ from pydantic import BaseModel, Field
 from models import todosapp
 from .auth import get_current_user
 
-# IMPORT THE NEW AI FUNCTIONS
-from ai_services import add_todo_to_vector_store, delete_todo_from_vector_store, ask_ai_about_todos
+# Import the refined AI function
+from ai_services import get_ai_response
 
 router = APIRouter(
     prefix="/todos",
@@ -25,59 +25,37 @@ def db_get():
 db_dependency = Annotated[Session, Depends(db_get)]
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
-## read all books get
-@router.get("/", status_code=status.HTTP_200_OK)
-async def read_all(user: user_dependency ,db : db_dependency):
-    if user is False:
-        raise HTTPException(status_code=404, detail='Authentication Failed')
-    return db.query(todosapp).filter(todosapp.Owner_id==user.get('user_id')).all()      
-
-### path 
-@router.get("/todo/{todo_id}", status_code=status.HTTP_200_OK)
-async def read_todo_id(user: user_dependency, db : db_dependency, todo_id :int=Path(gt=0)):
-    if user is False:
-        raise HTTPException(status_code=404, detail='Authentication Failed')
-    todo_model=db.query(todosapp).filter(todosapp.ID==todo_id).filter(todosapp.Owner_id==user.get('user_id')).first()
-    if todo_model is not None:
-        return todo_model
-    raise HTTPException(status_code=404, detail='item not found')  
-
-# basemodel
 class Todo_Request(BaseModel):
     Title : str = Field(min_length=3)
     Description: str = Field(min_length=3, max_length=100)
     Priority: int = Field(gt=0, lt=6)
     Complete: bool
-    
-### post
+
+class ChatRequest(BaseModel):
+    query: str = Field(min_length=2)
+
+## --- STANDARD TODO ENDPOINTS ---
+
+@router.get("/", status_code=status.HTTP_200_OK)
+async def read_all(user: user_dependency ,db : db_dependency):
+    if user is None:
+        raise HTTPException(status_code=401, detail='Authentication Failed')
+    return db.query(todosapp).filter(todosapp.Owner_id==user.get('user_id')).all()      
+
 @router.post("/todocreate", status_code=status.HTTP_201_CREATED)
 async def create_todo(user: user_dependency, db : db_dependency, todo_request : Todo_Request):
-    if user is False:
-        raise HTTPException(status_code=404, detail="Unauthorized")
+    if user is None:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     
     todo_model=todosapp(**todo_request.model_dump(), Owner_id=user.get('user_id'))
     db.add(todo_model)
     db.commit()
-    
-    # REFRESH the model to get the auto-generated ID from the database
-    db.refresh(todo_model)
-    
-    # ADD TO VECTOR STORE
-    add_todo_to_vector_store(
-        todo_id=todo_model.ID,
-        title=todo_model.Title,
-        description=todo_model.Description,
-        owner_id=todo_model.Owner_id
-    )
+    return {"status": "Created"}
 
-### update 
 @router.put("/todo/update/{todo_id}")
-async def update_todo(user:user_dependency,
-                      db : db_dependency,
-                       todo_request: Todo_Request,
-                         todo_id:int=Path(gt=0)):
-    if user is False:
-        raise HTTPException(status_code=404, detail='Authorization Failed')
+async def update_todo(user:user_dependency, db : db_dependency, todo_request: Todo_Request, todo_id:int=Path(gt=0)):
+    if user is None:
+        raise HTTPException(status_code=401, detail='Authorization Failed')
     
     todo_model=db.query(todosapp).filter(todosapp.ID==todo_id).filter(todosapp.Owner_id==user.get('user_id')).first()
     if todo_model is None:
@@ -90,23 +68,12 @@ async def update_todo(user:user_dependency,
     
     db.add(todo_model)
     db.commit()
+    return {"status": "Updated"}
 
-    # UPDATE IN VECTOR STORE (ChromaDB replaces the existing vector if the ID matches)
-    add_todo_to_vector_store(
-        todo_id=todo_id,
-        title=todo_model.Title,
-        description=todo_model.Description,
-        owner_id=user.get('user_id')
-    )
-
-#### delete endpoint 
 @router.delete("/delete_todo/{todo_id}")
-async def delete_todd(user: user_dependency, 
-                      db: db_dependency,
-                        todo_id: int=Path(gt=0)):
-        
-    if user is False:
-       raise HTTPException(status_code=404, detail='Authorization Failed')
+async def delete_todo(user: user_dependency, db: db_dependency, todo_id: int=Path(gt=0)):
+    if user is None:
+       raise HTTPException(status_code=401, detail='Authorization Failed')
     
     todo_model=db.query(todosapp).filter(todosapp.ID==todo_id).filter(todosapp.Owner_id==user.get('user_id')).first()
     if todo_model is None:
@@ -114,34 +81,28 @@ async def delete_todd(user: user_dependency,
     
     db.query(todosapp).filter(todosapp.ID==todo_id).filter(todosapp.Owner_id==user.get('user_id')).delete()
     db.commit()
+    return {"status": "Deleted"}
 
-    # REMOVE FROM VECTOR STORE
-    delete_todo_from_vector_store(todo_id=todo_id)
+## --- NEW AI CHAT ENDPOINT ---
 
-
-
-
-
-# Add this new Pydantic model for the AI Chat request
-class ChatRequest(BaseModel):
-    query: str = Field(min_length=2)
-
-# Add the new endpoint
 @router.post("/chat", status_code=status.HTTP_200_OK)
-async def chat_with_ai(user: user_dependency, chat_request: ChatRequest):
-    """Endpoint for the frontend to ask questions about tasks."""
-    if user is False:
+async def chat_with_ai(user: user_dependency, db: db_dependency, chat_request: ChatRequest):
+    """Endpoint that fetches todos from DB and feeds them to the AI."""
+    if user is None:
         raise HTTPException(status_code=401, detail="Authentication Failed")
     
     try:
-        # Pass the query and the secure user_id to the LangChain service
-        ai_response = ask_ai_about_todos(
-            query=chat_request.query, 
-            owner_id=user.get('user_id')
+        # 1. Fetch all todos for this specific user from Supabase
+        user_todos = db.query(todosapp).filter(todosapp.Owner_id == user.get('user_id')).all()
+        
+        # 2. Pass the user's query and their actual database tasks to the AI
+        ai_response = get_ai_response(
+            user_query=chat_request.query, 
+            todos_from_db=user_todos
         )
         
         return {"response": ai_response}
         
     except Exception as e:
         print(f"AI Chat Error: {e}")
-        raise HTTPException(status_code=500, detail="Something went wrong with the AI assistant.")
+        raise HTTPException(status_code=500, detail="The AI assistant is having a nap. Try again later.")
